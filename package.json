@@ -9,7 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@aws-sdk/client-polly": "^3.958.0",
+    "firebase": "^12.6.0",
     "next": "16.0.5",
+    "openai": "^6.15.0",
     "react": "19.2.0",
     "react-dom": "19.2.0"
   },
@@ -18,6 +21,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "baseline-browser-mapping": "^2.9.11",
     "eslint": "^9",
     "eslint-config-next": "16.0.5",
     "tailwindcss": "^4",
