@@ -256,7 +256,6 @@ export default function Home() {
   };
 
   const sendVoiceMessage = async (text: string) => {
-    // 前提チェック
     if (!user) {
       console.log("sendVoiceMessage: userがない");
       return;
@@ -284,13 +283,15 @@ export default function Home() {
       console.log("sendVoiceMessage: isProcessingRef.current が true");
       return;
     }
+    isProcessingRef.current = true;
 
     try {
-      // ① UI状態
+      console.log("① sendVoiceMessage 開始:", trimmed);
+
       setVoiceState("thinking");
       setAiText("");
 
-      // ② Firestore: thread ドキュメント（なければ作る）
+      console.log("② thread保存 開始");
       await setDoc(
         doc(db, "threads", threadId),
         {
@@ -300,53 +301,67 @@ export default function Home() {
         },
         { merge: true }
       );
+      console.log("② thread保存 完了");
 
-      // ③ Firestore: user発言 保存
+      console.log("③ user発言 保存 開始");
       await addDoc(collection(db, "threads", threadId, "messages"), {
         role: "user",
         content: trimmed,
         createdAt: serverTimestamp(),
       });
+      console.log("③ user発言 保存 完了");
 
-      // ④ /api/chat へ（まずは最小で人格を送る）
+      console.log("④ /api/chat 呼び出し開始");
       const chatRes = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           characterId: resolvedCharacterId,
-          personality: character.personality, // API側で characterId から読むなら不要だけど、安定のため入れる
+          personality: character.personality,
           userText: trimmed,
-          threadId, // API側で履歴使うなら
+          threadId,
         }),
       });
+
+      console.log("④ /api/chat status =", chatRes.status);
 
       if (!chatRes.ok) {
         const errText = await chatRes.text();
         console.log("CHAT ERROR:", errText);
-        alert("CHAT ERROR: " + errText);
-        throw new Error(`CHAT failed: ${chatRes.status}`);
+        setAiText("chat error: " + errText);
+        return;
       }
 
       const chatData = await chatRes.json();
+      console.log("⑤ chatData =", chatData);
+
       const assistantText: string = chatData.text ?? chatData.assistantText ?? "";
+      console.log("⑤ assistantText =", assistantText);
 
       if (!assistantText.trim()) {
-        throw new Error("CHAT returned empty text");
+        console.log("CHAT returned empty text");
+        setAiText("AIの返答が空でした");
+        return;
       }
 
-      // ⑤ 画面表示（デバッグ用）
       setAiText(assistantText);
+      console.log("⑥ AI返答表示 完了");
 
-      // ⑥ Firestore: AI発言 保存
+      console.log("⑦ AI発言 保存 開始");
       await addDoc(collection(db, "threads", threadId, "messages"), {
         role: "assistant",
         content: assistantText,
         createdAt: serverTimestamp(),
       });
+      console.log("⑦ AI発言 保存 完了");
 
-      // ⑦ /api/tts で再生
+      console.log("⑧ TTS再生 開始");
       await playTTS(assistantText, character.voiceId);
+      console.log("⑧ TTS再生 完了");
 
+    } catch (e: any) {
+      console.error("sendVoiceMessage ERROR =", e);
+      setAiText("エラー: " + (e?.message ?? String(e)));
     } finally {
       setVoiceState("idle");
       isProcessingRef.current = false;
