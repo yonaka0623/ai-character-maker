@@ -2,31 +2,37 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
 const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY!,
+    apiKey: process.env.OPENAI_API_KEY,
 });
 
 export async function POST(req: Request) {
-    const body = await req.json();
-    const { messages, character } = body;
+    try {
+        const body = await req.json();
+        const userText = String(body?.userText ?? "");
 
-    // system（人格）
-    const systemPrompt = `
-あなたは「${character.name}」というキャラクターです。
-性格：${character.personality}
-口調は自然で親しみやすく、日本語で会話してください。
-`;
+        console.log("[/api/chat] userText =", userText);
 
-    const completion = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        temperature: 0.8,
-        max_tokens: 300,
-        messages: [
-            { role: "system", content: systemPrompt },
-            ...messages,
-        ],
-    });
+        if (!process.env.OPENAI_API_KEY) {
+            return NextResponse.json(
+                { error: "OPENAI_API_KEY が設定されていません（.env.local を確認）" },
+                { status: 500 }
+            );
+        }
 
-    const reply = completion.choices[0].message.content;
+        // ✅ OpenAIを最小で呼ぶ（まずはここだけ）
+        const resp = await client.chat.completions.create({
+            model: "gpt-4o-mini",
+            messages: [{ role: "user", content: userText }],
+        });
 
-    return NextResponse.json({ reply });
+        const text = resp.choices?.[0]?.message?.content ?? "";
+
+        return NextResponse.json({ text });
+    } catch (e: any) {
+        console.error("[/api/chat] ERROR =", e);
+        return NextResponse.json(
+            { error: e?.message ?? String(e) },
+            { status: 500 }
+        );
+    }
 }
