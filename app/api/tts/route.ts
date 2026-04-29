@@ -45,14 +45,16 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "voiceId が空です" }, { status: 400 });
         }
 
-        // Pollyで音声合成
+
+        // voiceIdに応じてエンジンを自動選択
+        const neuralVoices = ["Kazuha", "Tomoko"];
+        const engine = neuralVoices.includes(voiceId) ? "neural" : "standard";
+
         const cmd = new SynthesizeSpeechCommand({
             OutputFormat: "mp3",
             Text: text,
-            VoiceId: voiceId as any, // Mizuki / Takumi など
-            //Engine: "neural",        // Mizuki等はneural対応が多い（ダメならstandardに変える）
-            // TextType: "text",
-            // LanguageCode: "ja-JP", // voiceIdが日本語なら不要でもOK
+            VoiceId: voiceId as any,
+            Engine: engine as any,
         });
 
         const result = await polly.send(cmd);

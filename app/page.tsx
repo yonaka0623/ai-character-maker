@@ -1,5 +1,6 @@
 "use client";
 
+import { useVoice } from "@/hooks/useVoice";
 import { auth, db } from "@/lib/firebase";
 import type { User } from "firebase/auth";
 import { onAuthStateChanged, signOut } from "firebase/auth";
@@ -7,6 +8,7 @@ import { addDoc, collection, doc, getDoc, serverTimestamp, setDoc } from "fireba
 import dynamic from "next/dynamic";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+
 
 // Footer は client-only で読み込む
 const Footer = dynamic(() => import("./components/Footer"), {
@@ -34,23 +36,16 @@ export default function Home() {
   // ✅ Home側で「キャラ情報」
   const [character, setCharacter] = useState<Character | null>(null);
 
-  type VoiceState = "idle" | "listening" | "thinking" | "speaking";
+  const {
+    voiceState,
+    setVoiceState,
+    secondsLeft,
+    recognizedText,
+    speak,
+    startListening,
+    stopListening,
+  } = useVoice();
 
-  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
-  const [secondsLeft, setSecondsLeft] = useState<number>(10);
-  const timerRef = useRef<number | null>(null);
-
-  const stopOnceRef = useRef(false);
-
-  // STT（Web Speech API）
-  const recognitionRef = useRef<any>(null);
-  const isStoppingRef = useRef(false);
-
-  const [sttSupported, setSttSupported] = useState(true);
-  const [recognizedText, setRecognizedText] = useState<string>("");
-  const finalTextRef = useRef<string>("");
-
-  const recognizedTextRef = useRef<string>("");
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -58,7 +53,6 @@ export default function Home() {
 
   const [aiText, setAiText] = useState<string>("");
   const isProcessingRef = useRef(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const threadId =
     user && resolvedCharacterId ? `${user.uid}_${resolvedCharacterId}` : null;
@@ -119,141 +113,6 @@ export default function Home() {
       });
     });
   }, [resolvedCharacterId]);
-
-  const startListeningUI = () => {
-    if (voiceState !== "idle") return;
-    if (!sttSupported) return;
-
-    stopOnceRef.current = false;
-    isStoppingRef.current = false; // ★追加
-
-    // 前回分をクリア
-    finalTextRef.current = "";
-    recognizedTextRef.current = "";
-    setRecognizedText("");
-
-    // STT開始
-    try {
-      recognitionRef.current?.start();
-    } catch (e) {
-      console.error("STT start error:", e);
-      setVoiceState("idle");
-      setSecondsLeft(10);
-      return;
-    }
-
-    setVoiceState("listening");
-    setSecondsLeft(10);
-
-    timerRef.current = window.setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          stopListeningUI();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  };
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const SR =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SR) {
-      setSttSupported(false);
-      return;
-    }
-
-    const rec = new SR();
-    rec.lang = "ja-JP";           // 英語なら "en-US" など
-    rec.interimResults = true;    // 途中結果も拾う（ただし送信はしない）
-    rec.continuous = true;        // 押してる間継続
-
-    rec.onresult = (event: any) => {
-      let final = "";
-      let interim = "";
-
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const txt = event.results[i][0].transcript;
-        if (event.results[i].isFinal) final += txt;
-        else interim += txt;
-      }
-
-      if (final) {
-        finalTextRef.current += final;
-        const v = finalTextRef.current.trim();
-        recognizedTextRef.current = v;      // ★追加
-        setRecognizedText(v);
-      } else if (interim) {
-        const v = (finalTextRef.current + interim).trim();
-        recognizedTextRef.current = v;      // ★追加
-        setRecognizedText(v);
-      }
-    };
-
-    rec.onend = () => {
-      // stop() で終了した場合は何もしない
-      if (isStoppingRef.current) {
-        isStoppingRef.current = false;
-        return;
-      }
-      // 想定外で落ちたとき：listening中ならUIも止める
-      if (voiceState === "listening") {
-        stopListeningUI();
-      }
-    };
-
-    recognitionRef.current = rec;
-
-    return () => {
-      try {
-        rec.abort?.();
-      } catch { }
-      recognitionRef.current = null;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const playTTS = async (text: string, voiceId: string) => {
-    setVoiceState("speaking");
-
-    const res = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, voiceId }),
-    });
-
-    if (!res.ok) {
-      throw new Error(`TTS failed: ${res.status}`);
-    }
-
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-
-    // 前の音を止める
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current = null;
-    }
-
-    const audio = new Audio(url);
-    audioRef.current = audio;
-
-    await new Promise<void>((resolve, reject) => {
-      audio.onended = () => {
-        URL.revokeObjectURL(url);
-        resolve();
-      };
-      audio.onerror = () => {
-        URL.revokeObjectURL(url);
-        reject(new Error("Audio playback error"));
-      };
-      audio.play().catch(reject);
-    });
-  };
 
   const sendVoiceMessage = async (text: string) => {
     if (!user) {
@@ -356,7 +215,8 @@ export default function Home() {
       console.log("⑦ AI発言 保存 完了");
 
       console.log("⑧ TTS再生 開始");
-      await playTTS(assistantText, character.voiceId);
+      setVoiceState("speaking");
+      await speak(assistantText, character.voiceId);
       console.log("⑧ TTS再生 完了");
 
     } catch (e: any) {
@@ -365,38 +225,6 @@ export default function Home() {
     } finally {
       setVoiceState("idle");
       isProcessingRef.current = false;
-    }
-  };
-
-  const stopListeningUI = () => {
-    // ★ 2回目以降の stop を無視（onMouseUp + onMouseLeave + onTouchEnd 対策）
-    if (stopOnceRef.current) return;
-    stopOnceRef.current = true;
-
-    if (timerRef.current) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    // ★ STTをちゃんと止める
-    try {
-      isStoppingRef.current = true;
-      recognitionRef.current?.stop();
-    } catch { }
-
-    setVoiceState("idle");
-    setSecondsLeft(10);
-
-    // 同じ文を2回送らないように、送信前にクリア
-    const textToSend = (recognizedTextRef.current || recognizedText).trim();
-
-    // クリア（次の会話に残さない）
-    setRecognizedText("");
-    recognizedTextRef.current = "";
-    finalTextRef.current = "";
-
-    if (textToSend) {
-      sendVoiceMessage(textToSend);
     }
   };
 
@@ -469,9 +297,10 @@ export default function Home() {
           <button
             className={`w-full py-3 rounded-md text-lg select-none ${voiceState === "listening" ? "bg-red-500 text-white" : "bg-blue-500 text-white"
               }`}
-            onPointerDown={startListeningUI}
-            onPointerUp={stopListeningUI}
-            onPointerCancel={stopListeningUI}
+            onPointerDown={() => startListening((text) => sendVoiceMessage(text))}
+            onPointerUp={stopListening}
+            onPointerCancel={stopListening}
+
             disabled={voiceState === "thinking" || voiceState === "speaking"}
           >
             {voiceState === "listening" ? "話し中（離すと送信）" : "押して話す"}
