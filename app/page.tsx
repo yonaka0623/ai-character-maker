@@ -195,6 +195,8 @@ export default function Home() {
       console.log("⑤ chatData =", chatData);
 
       const assistantText: string = chatData.text ?? chatData.assistantText ?? "";
+      const emotion: string = chatData.emotion ?? "neutral";
+      console.log("⑤ emotion =", emotion);
       console.log("⑤ assistantText =", assistantText);
 
       if (!assistantText.trim()) {

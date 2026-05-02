@@ -20,26 +20,33 @@ export async function POST(req: Request) {
             );
         }
 
-        // ✅ OpenAIを最小で呼ぶ（まずはここだけ）
         const resp = await client.chat.completions.create({
             model: "gpt-4o-mini",
             messages: [
                 {
                     role: "system",
-                    content: personality
-                        ? `あなたは次のキャラクターとして自然に会話してください。\n\n${personality}`
-                        : "あなたは親切なAIキャラクターです。"
+                    content: (personality
+                        ? `あなたは次のキャラクターとして自然に会話してください。\n\n${personality}\n\n`
+                        : "あなたは親切なAIキャラクターです。\n\n")
+                        + `返答は必ず以下のJSON形式のみで返してください。それ以外のテキストは含めないでください。
+                    {"emotion": "happy | sad | angry | embarrassing | neutral のいずれか", "text": "セリフ"}`
                 },
                 {
                     role: "user",
                     content: userText
                 }
             ],
+            response_format: { type: "json_object" },
         });
 
-        const text = resp.choices?.[0]?.message?.content ?? "";
+        const raw = resp.choices?.[0]?.message?.content ?? "{}";
+        const parsed = JSON.parse(raw);
+        const text = parsed.text ?? "";
+        const emotion = parsed.emotion ?? "neutral";
+        console.log("[/api/chat] emotion =", emotion);
 
-        return NextResponse.json({ text });
+        return NextResponse.json({ text, emotion });
+
     } catch (e: any) {
         console.error("[/api/chat] ERROR =", e);
         return NextResponse.json(
