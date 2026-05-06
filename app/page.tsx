@@ -15,12 +15,17 @@ const Footer = dynamic(() => import("./components/Footer"), {
   ssr: false,
 });
 
+const VrmViewer = dynamic(() => import("./components/VrmViewer"), {
+  ssr: false,
+});
+
 type Character = {
   name: string;
   personality: string;
   voiceId: string;
   shortPersonality?: string;
   iconUrl?: string | null;
+  modelUrl?: string;
 };
 
 export default function Home() {
@@ -110,6 +115,7 @@ export default function Home() {
         voiceId: data.voiceId ?? "",
         shortPersonality: data.shortPersonality,
         iconUrl: data.iconUrl ?? null,
+        modelUrl: data.modelUrl ?? "",
       });
     });
   }, [resolvedCharacterId]);
@@ -271,9 +277,7 @@ export default function Home() {
               <div className="text-xs text-gray-400">
                 voiceId: {character?.voiceId ?? "(未取得)"}
               </div>
-              <div className="text-sm text-gray-500 mt-2">
-                ここが「3D表示エリア」になる予定
-              </div>
+              <VrmViewer modelUrl={character?.modelUrl} />
             </>
           ) : (
             <>

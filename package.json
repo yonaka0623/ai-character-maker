@@ -10,17 +10,20 @@
   },
   "dependencies": {
     "@aws-sdk/client-polly": "^3.958.0",
+    "@pixiv/three-vrm": "^3.5.2",
     "firebase": "^12.6.0",
     "next": "16.0.5",
     "openai": "^6.15.0",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/three": "^0.184.0",
     "baseline-browser-mapping": "^2.10.25",
     "eslint": "^9",
     "eslint-config-next": "16.0.5",
